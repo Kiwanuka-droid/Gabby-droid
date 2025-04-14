@@ -1,2 +1,34 @@
-# Gabby-droid
-Solution to African problems 
+# Marriage Model
+class Marriage(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    spouse1_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    spouse2_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    status = db.Column(db.String(50), default="Married")  # Married, Divorced
+
+# Get Married
+@app.route('/marry', methods=['POST'])
+def marry():
+    data = request.get_json()
+    user1 = User.query.get(data['spouse1_id'])
+    user2 = User.query.get(data['spouse2_id'])
+
+    if user1 and user2:
+        marriage = Marriage(spouse1_id=user1.id, spouse2_id=user2.id)
+        db.session.add(marriage)
+        db.session.commit()
+        return jsonify({"message": f"{user1.username} and {user2.username} are now married!"}), 200
+    return jsonify({"message": "Marriage failed."}), 400
+
+# Inheritance System
+@app.route('/inherit_wealth', methods=['POST'])
+def inherit_wealth():
+    data = request.get_json()
+    deceased = User.query.get(data['deceased_id'])
+    heir = User.query.get(data['heir_id'])
+
+    if deceased and heir:
+        heir.coins += deceased.coins
+        deceased.coins = 0
+        db.session.commit()
+        return jsonify({"message": f"{heir.username} inherited {deceased.coins} coins."}), 200
+    return jsonify({"message": "Inheritance failed."}), 400
