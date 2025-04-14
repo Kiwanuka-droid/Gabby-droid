@@ -81,3 +81,51 @@ def vote():
     if user and gov_record and gov_record.has_national_id:
         return jsonify({"message": f"Vote cast for {data['candidate']}!"}), 200
     return jsonify({"message": "You must have a National ID to vote."}), 400
+# Transport Model
+class Transport(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    vehicle_type = db.Column(db.String(50), default="None")  # Bus, Taxi, Boda, Car
+    fuel = db.Column(db.Integer, default=0)  # Only for personal cars
+
+# Public Transport
+@app.route('/use_transport', methods=['POST'])
+def use_transport():
+    data = request.get_json()
+    user = User.query.get(data['user_id'])
+    transport_costs = {"bus": 200, "taxi": 500, "boda": 1000}  # Travel prices
+
+    if user and data['mode'] in transport_costs and user.coins >= transport_costs[data['mode']]:
+        user.coins -= transport_costs[data['mode']]
+        db.session.commit()
+        return jsonify({"message": f"Traveled using {data['mode']}.", "new_balance": user.coins}), 200
+    return jsonify({"message": "Insufficient funds or invalid transport mode."}), 400
+
+# Buy a Car
+@app.route('/buy_car', methods=['POST'])
+def buy_car():
+    data = request.get_json()
+    user = User.query.get(data['user_id'])
+    car_price = 50000  # Price of a car
+
+    if user and user.coins >= car_price:
+        user.coins -= car_price
+        new_car = Transport(user_id=user.id, vehicle_type="Car", fuel=100)
+        db.session.add(new_car)
+        db.session.commit()
+        return jsonify({"message": "Car purchased!", "new_balance": user.coins}), 200
+    return jsonify({"message": "Insufficient funds or user not found"}), 400
+
+# Refuel Car
+@app.route('/refuel_car', methods=['POST'])
+def refuel_car():
+    data = request.get_json()
+    user = User.query.get(data['user_id'])
+    car = Transport.query.filter_by(user_id=user.id, vehicle_type="Car").first()
+
+    if user and car and user.coins >= 5000:
+        user.coins -= 5000
+        car.fuel = 100  # Full tank
+        db.session.commit()
+        return jsonify({"message": "Car refueled!", "new_balance": user.coins}), 200
+    return jsonify({"message": "Insufficient funds or no car found."}), 400
