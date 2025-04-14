@@ -129,3 +129,39 @@ def refuel_car():
         db.session.commit()
         return jsonify({"message": "Car refueled!", "new_balance": user.coins}), 200
     return jsonify({"message": "Insufficient funds or no car found."}), 400
+# Religion Model
+class Religion(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    faith = db.Column(db.String(50))  # Christianity, Islam, etc.
+    reputation = db.Column(db.Integer, default=0)  # Higher reputation = better social status
+
+# Attend Religious Service
+@app.route('/attend_service', methods=['POST'])
+def attend_service():
+    data = request.get_json()
+    user = User.query.get(data['user_id'])
+    religion = Religion.query.filter_by(user_id=user.id).first()
+
+    if user:
+        if not religion:
+            religion = Religion(user_id=user.id, faith=data['faith'])
+            db.session.add(religion)
+        religion.reputation += 10  # Increase reputation
+        db.session.commit()
+        return jsonify({"message": "Service attended!", "new_reputation": religion.reputation}), 200
+    return jsonify({"message": "User not found"}), 404
+
+# Make a Donation
+@app.route('/donate', methods=['POST'])
+def donate_money():
+    data = request.get_json()
+    user = User.query.get(data['user_id'])
+    religion = Religion.query.filter_by(user_id=user.id).first()
+
+    if user and religion and user.coins >= data['amount']:
+        user.coins -= data['amount']
+        religion.reputation += 20  # Donations increase reputation
+        db.session.commit()
+        return jsonify({"message": "Donation successful!", "new_balance": user.coins, "new_reputation": religion.reputation}), 200
+    return jsonify({"message": "Insufficient funds or user not found"}), 400
