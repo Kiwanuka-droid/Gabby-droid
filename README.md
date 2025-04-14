@@ -165,3 +165,56 @@ def donate_money():
         db.session.commit()
         return jsonify({"message": "Donation successful!", "new_balance": user.coins, "new_reputation": religion.reputation}), 200
     return jsonify({"message": "Insufficient funds or user not found"}), 400
+# Crime Record Model
+class CrimeRecord(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    crime = db.Column(db.String(100))
+    fine = db.Column(db.Integer, default=0)
+    jail_time = db.Column(db.Integer, default=0)  # Days in jail
+
+# Commit a Crime (For Testing)
+@app.route('/commit_crime', methods=['POST'])
+def commit_crime():
+    data = request.get_json()
+    user = User.query.get(data['user_id'])
+
+    if user:
+        crime_type = data['crime']
+        fine = data.get('fine', 500)
+        jail_time = data.get('jail_time', 0)
+        crime_record = CrimeRecord(user_id=user.id, crime=crime_type, fine=fine, jail_time=jail_time)
+        db.session.add(crime_record)
+        db.session.commit()
+        return jsonify({"message": f"Committed {crime_type}. Fine: {fine}, Jail Time: {jail_time} days"}), 200
+    return jsonify({"message": "User not found"}), 404
+
+# Pay a Fine to Avoid Jail
+@app.route('/pay_fine', methods=['POST'])
+def pay_fine():
+    data = request.get_json()
+    user = User.query.get(data['user_id'])
+    crime_record = CrimeRecord.query.filter_by(user_id=user.id).first()
+
+    if user and crime_record and user.coins >= crime_record.fine:
+        user.coins -= crime_record.fine
+        db.session.delete(crime_record)  # Clear crime record
+        db.session.commit()
+        return jsonify({"message": "Fine paid, charges cleared!", "new_balance": user.coins}), 200
+    return jsonify({"message": "Insufficient funds or no crime record"}), 400
+
+# Serve Jail Time
+@app.route('/serve_jail', methods=['POST'])
+def serve_jail():
+    data = request.get_json()
+    user = User.query.get(data['user_id'])
+    crime_record = CrimeRecord.query.filter_by(user_id=user.id).first()
+
+    if user and crime_record:
+        time_served = data['days']
+        if time_served >= crime_record.jail_time:
+            db.session.delete(crime_record)  # Clear record after jail time
+            db.session.commit()
+            return jsonify({"message": "Jail time served, record cleared!"}), 200
+        return jsonify({"message": f"Still {crime_record.jail_time - time_served} days left."}), 400
+    return jsonify({"message": "No jail sentence found"}), 404
