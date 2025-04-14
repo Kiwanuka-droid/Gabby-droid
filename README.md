@@ -1,3 +1,13 @@
+@app.route('/host_event', methods=['POST'])
+def host_event():
+    data = request.get_json()
+    user = User.query.get(data['user_id'])
+    if user:
+        earnings = data['entry_fee'] * data['attendees']
+        user.coins += earnings
+        db.session.commit()
+        return jsonify({"message": "Event hosted successfully!", "new_balance": user.coins}), 200
+    return jsonify({"message": "User not found"}), 404
 # Marriage Model
 class Marriage(db.Model):
     id = db.Column(db.Integer, primary_key=True)
