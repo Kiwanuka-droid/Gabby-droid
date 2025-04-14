@@ -218,3 +218,36 @@ def serve_jail():
             return jsonify({"message": "Jail time served, record cleared!"}), 200
         return jsonify({"message": f"Still {crime_record.jail_time - time_served} days left."}), 400
     return jsonify({"message": "No jail sentence found"}), 404
+# Education Model
+class Education(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    level = db.Column(db.String(50), default="None")  # Primary, Secondary, University
+
+# Enroll in School/University
+@app.route('/enroll', methods=['POST'])
+def enroll_school():
+    data = request.get_json()
+    user = User.query.get(data['user_id'])
+    education = Education.query.filter_by(user_id=user.id).first()
+
+    if user and user.coins >= data['tuition_fee']:
+        user.coins -= data['tuition_fee']
+        new_level = data['level']
+        if education:
+            education.level = new_level
+        else:
+            education = Education(user_id=user.id, level=new_level)
+            db.session.add(education)
+        db.session.commit()
+        return jsonify({"message": f"Enrolled in {new_level}!", "new_balance": user.coins}), 200
+    return jsonify({"message": "Insufficient funds or user not found"}), 400
+
+# Check Education Level
+@app.route('/education_status', methods=['GET'])
+def check_education():
+    user_id = request.args.get('user_id')
+    education = Education.query.filter_by(user_id=user_id).first()
+    if education:
+        return jsonify({"education_level": education.level}), 200
+    return jsonify({"message": "User not found"}), 404
