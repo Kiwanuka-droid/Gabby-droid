@@ -325,3 +325,31 @@ def pay_loan():
         db.session.commit()
         return jsonify({"message": "Loan repayment successful!"}), 200
     return jsonify({"message": "Insufficient funds or user not found"}), 400
+# Player Health Model
+class PlayerHealth(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    health = db.Column(db.Integer, default=100)  # Max health = 100
+
+# Check Player Health
+@app.route('/health_status', methods=['GET'])
+def health_status():
+    user_id = request.args.get('user_id')
+    health = PlayerHealth.query.filter_by(user_id=user_id).first()
+    if health:
+        return jsonify({"message": "Health checked", "health": health.health}), 200
+    return jsonify({"message": "User not found"}), 404
+
+# Go to Hospital (Restore Health)
+@app.route('/hospital', methods=['POST'])
+def visit_hospital():
+    data = request.get_json()
+    user = User.query.get(data['user_id'])
+    health = PlayerHealth.query.filter_by(user_id=user.id).first()
+
+    if user and health and user.coins >= data['treatment_cost']:
+        user.coins -= data['treatment_cost']
+        health.health = 100  # Restore full health
+        db.session.commit()
+        return jsonify({"message": "Treated successfully!", "new_balance": user.coins}), 200
+    return jsonify({"message": "Insufficient funds or user not found"}), 400
