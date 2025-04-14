@@ -251,3 +251,77 @@ def check_education():
     if education:
         return jsonify({"education_level": education.level}), 200
     return jsonify({"message": "User not found"}), 404
+# Bank Account Model
+class BankAccount(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    balance = db.Column(db.Integer, default=0)
+
+# Open Bank Account
+@app.route('/open_account', methods=['POST'])
+def open_account():
+    data = request.get_json()
+    user = User.query.get(data['user_id'])
+    if user:
+        new_account = BankAccount(user_id=user.id)
+        db.session.add(new_account)
+        db.session.commit()
+        return jsonify({"message": "Bank account opened!"}), 201
+    return jsonify({"message": "User not found"}), 404
+
+# Deposit Money to Bank
+@app.route('/deposit', methods=['POST'])
+def deposit_money():
+    data = request.get_json()
+    user = User.query.get(data['user_id'])
+    account = BankAccount.query.filter_by(user_id=user.id).first()
+
+    if user and account and user.coins >= data['amount']:
+        user.coins -= data['amount']
+        account.balance += data['amount']
+        db.session.commit()
+        return jsonify({"message": "Deposit successful!", "bank_balance": account.balance}), 200
+    return jsonify({"message": "Insufficient funds or user not found"}), 400
+
+# Withdraw Money from Bank
+@app.route('/withdraw_bank', methods=['POST'])
+def withdraw_bank():
+    data = request.get_json()
+    user = User.query.get(data['user_id'])
+    account = BankAccount.query.filter_by(user_id=user.id).first()
+
+    if user and account and account.balance >= data['amount']:
+        account.balance -= data['amount']
+        user.coins += data['amount']
+        db.session.commit()
+        return jsonify({"message": "Withdrawal successful!", "new_balance": user.coins}), 200
+    return jsonify({"message": "Insufficient bank balance or user not found"}), 400
+
+# Apply for a Loan
+@app.route('/loan', methods=['POST'])
+def take_loan():
+    data = request.get_json()
+    user = User.query.get(data['user_id'])
+    account = BankAccount.query.filter_by(user_id=user.id).first()
+
+    if user and account:
+        loan_amount = data['amount']
+        interest = int(loan_amount * 0.1)  # 10% interest
+        total_repay = loan_amount + interest
+        account.balance += loan_amount
+        db.session.commit()
+        return jsonify({"message": f"Loan approved! You owe {total_repay} coins."}), 200
+    return jsonify({"message": "User not found"}), 404
+
+# Pay Loan
+@app.route('/pay_loan', methods=['POST'])
+def pay_loan():
+    data = request.get_json()
+    user = User.query.get(data['user_id'])
+    account = BankAccount.query.filter_by(user_id=user.id).first()
+
+    if user and account and account.balance >= data['amount']:
+        account.balance -= data['amount']
+        db.session.commit()
+        return jsonify({"message": "Loan repayment successful!"}), 200
+    return jsonify({"message": "Insufficient funds or user not found"}), 400
