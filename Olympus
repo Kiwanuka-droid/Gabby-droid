@@ -32,4 +32,79 @@ def inherit_wealth():
         db.session.commit()
         return jsonify({"message": f"{heir.username} inherited {deceased.coins} coins."}), 200
     return jsonify({"message": "Inheritance failed."}), 400
+from flask import Flask, request, jsonify
+from flask_sqlalchemy import SQLAlchemy
 
+app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///game.db'  # Example database
+db = SQLAlchemy(app)
+
+# User Model
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(50), nullable=False, unique=True)
+    coins = db.Column(db.Integer, default=0)
+
+# Marriage Model
+class Marriage(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    spouse1_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    spouse2_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    status = db.Column(db.String(50), default="Married")  # Married, Divorced
+
+# Marriage Route
+@app.route('/marry', methods=['POST'])
+def marry():
+    data = request.get_json()
+    user1 = User.query.get(data['spouse1_id'])
+    user2 = User.query.get(data['spouse2_id'])
+
+    if user1 and user2:
+        marriage = Marriage(spouse1_id=user1.id, spouse2_id=user2.id)
+        db.session.add(marriage)
+        db.session.commit()
+        return jsonify({"message": f"{user1.username} and {user2.username} are now married!"}), 200
+    return jsonify({"message": "Marriage failed."}), 400
+
+# Inheritance Route
+@app.route('/inherit_wealth', methods=['POST'])
+def inherit_wealth():
+    data = request.get_json()
+    deceased = User.query.get(data['deceased_id'])
+    heir = User.query.get(data['heir_id'])
+
+    if deceased and heir:
+        heir.coins += deceased.coins
+        deceased.coins = 0
+        db.session.commit()
+        return jsonify({"message": f"{heir.username} inherited {deceased.coins} coins."}), 200
+    return jsonify({"message": "Inheritance failed."}), 400
+
+# Real-Life Mirroring Game Logic
+@app.route('/perform_action', methods=['POST'])
+def perform_action():
+    data = request.get_json()
+    user = User.query.get(data['user_id'])
+    action = data.get('action')
+
+    if user:
+        if action == "earn_coins":
+            user.coins += 10  # Example earning logic
+            db.session.commit()
+            return jsonify({"message": f"{user.username} earned 10 coins!"}), 200
+        elif action == "spend_coins":
+            if user.coins >= 5:
+                user.coins -= 5  # Example spending logic
+                db.session.commit()
+                return jsonify({"message": f"{user.username} spent 5 coins!"}), 200
+            else:
+                return jsonify({"message": "Not enough coins."}), 400
+    return jsonify({"message": "Action failed."}), 400
+
+# Initialize Database
+@app.before_first_request
+def create_tables():
+    db.create_all()
+
+if __name__ == '__main__':
+    app.run(debug=True)
