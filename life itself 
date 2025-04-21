@@ -1,0 +1,177 @@
+# life_itself_backend/main.py
+from fastapi import FastAPI, HTTPException, Depends
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from pydantic import BaseModel
+from datetime import datetime, timedelta
+from typing import Optional, List
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+
+app = FastAPI()
+
+origins = [
+    "http://localhost",
+    "http://localhost:3000",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+SECRET_KEY = "secret123"
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
+
+fake_users_db = {}
+user_subscriptions = {}
+user_quizzes = {}
+user_ads = []
+user_jobs = []
+user_items = []
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+# MODELS
+class User(BaseModel):
+    username: str
+    password: str
+    email: str
+    campus: str
+    is_superadmin: Optional[bool] = False
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class Ad(BaseModel):
+    username: str
+    title: str
+    description: str
+
+class Job(BaseModel):
+    username: str
+    title: str
+    description: str
+
+class Item(BaseModel):
+    username: str
+    name: str
+    price: float
+    description: str
+
+class QuizQuestion(BaseModel):
+    question: str
+    options: List[str]
+    correct_answer: str
+
+quiz_questions: List[QuizQuestion] = []
+
+# HELPERS
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
+
+def get_password_hash(password):
+    return pwd_context.hash(password)
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+def get_current_user(token: str = Depends(oauth2_scheme)):
+    credentials_exception = HTTPException(
+        status_code=401,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+    user = fake_users_db.get(username)
+    if user is None:
+        raise credentials_exception
+    return user
+
+# ROUTES
+@app.post("/register")
+def register(user: User):
+    if user.username in fake_users_db:
+        raise HTTPException(status_code=400, detail="Username already registered")
+    hashed_pw = get_password_hash(user.password)
+    fake_users_db[user.username] = user.dict()
+    fake_users_db[user.username]['password'] = hashed_pw
+    return {"msg": "User registered successfully"}
+
+@app.post("/token", response_model=Token)
+def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    user = fake_users_db.get(form_data.username)
+    if not user or not verify_password(form_data.password, user['password']):
+        raise HTTPException(status_code=400, detail="Incorrect username or password")
+    access_token = create_access_token(data={"sub": user['username']})
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.post("/ads")
+def create_ad(ad: Ad, user=Depends(get_current_user)):
+    user_ads.append(ad)
+    return {"msg": "Ad created"}
+
+@app.get("/ads")
+def list_ads():
+    return user_ads
+
+@app.post("/jobs")
+def create_job(job: Job, user=Depends(get_current_user)):
+    user_jobs.append(job)
+    return {"msg": "Job posted"}
+
+@app.get("/jobs")
+def list_jobs():
+    return user_jobs
+
+@app.post("/items")
+def create_item(item: Item, user=Depends(get_current_user)):
+    user_items.append(item)
+    return {"msg": "Item added"}
+
+@app.get("/items")
+def list_items():
+    return user_items
+
+@app.post("/quiz/add")
+def add_quiz(q: QuizQuestion, user=Depends(get_current_user)):
+    if not user['is_superadmin']:
+        raise HTTPException(status_code=403, detail="Only admin can add quizzes")
+    quiz_questions.append(q)
+    return {"msg": "Quiz added"}
+
+@app.get("/quiz")
+def get_quiz():
+    return quiz_questions
+
+@app.post("/quiz/submit")
+def submit_quiz(answers: List[str], user=Depends(get_current_user)):
+    correct = 0
+    for q, a in zip(quiz_questions, answers):
+        if q.correct_answer == a:
+            correct += 1
+    user_quizzes[user['username']] = correct
+    return {"score": correct}
+
+@app.get("/quiz/results")
+def quiz_results():
+    return user_quizzes
